@@ -1,6 +1,6 @@
 import sqlite3
 from config import TOPICS
-from datetime import datetime, timedelta
+from datetime import datetime
 
 DB_FILE = "botdb_new.db"
 
@@ -26,7 +26,6 @@ def init_db():
     )
     """)
 
-    # Добавлено поле normalized_title
     c.execute("""
     CREATE TABLE IF NOT EXISTS news (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +40,9 @@ def init_db():
         source TEXT,
         real_source TEXT,
         fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        normalized_title TEXT
+        normalized_title TEXT,
+        embedding BLOB,
+        rss_summary TEXT
     )
     """)
 
@@ -76,20 +77,38 @@ def init_db():
     )
     """)
 
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS news_chunks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        news_id INTEGER NOT NULL,
+        chunk_text TEXT NOT NULL,
+        embedding BLOB,
+        FOREIGN KEY(news_id) REFERENCES news(id) ON DELETE CASCADE
+    )
+    """)
+
     c.execute("CREATE INDEX IF NOT EXISTS idx_news_topic_published ON news(topic, published)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_news_fetched ON news(fetched_at)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_news_normalized_title ON news(normalized_title)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_chunks_news ON news_chunks(news_id)")
 
-    # Миграция для добавления normalized_title, если её нет
+    # Миграция для добавления колонок, если их нет
     try:
         c.execute("ALTER TABLE news ADD COLUMN normalized_title TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("ALTER TABLE news ADD COLUMN embedding BLOB")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("ALTER TABLE news ADD COLUMN rss_summary TEXT")
     except sqlite3.OperationalError:
         pass
 
     conn.commit()
     conn.close()
 
-# Остальные функции без изменений
 def get_current_newsletter():
     conn = get_connection()
     c = conn.cursor()
